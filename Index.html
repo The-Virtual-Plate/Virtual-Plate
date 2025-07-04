@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Virtual Plate</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #fff8f0;
+      margin: 0;
+      color: #333;
+    }
+    header {
+      background-color: #ff6f00;
+      padding: 1rem;
+      text-align: center;
+      color: white;
+    }
+    .btn, .input {
+      display: block;
+      width: 80%;
+      margin: 1rem auto;
+      padding: 0.8rem;
+      border-radius: 8px;
+      border: none;
+      font-size: 1rem;
+    }
+    .btn {
+      background-color: #ff6f00;
+      color: white;
+      cursor: pointer;
+    }
+    .input {
+      border: 1px solid #ccc;
+    }
+    .menu-item, .cart-item, .review-item {
+      background: #fff;
+      margin: 1rem;
+      padding: 1rem;
+      border-radius: 10px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    footer {
+      text-align: center;
+      font-size: 0.8rem;
+      padding: 1rem;
+      background: #f0f0f0;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login">
+  <h2>Login / Register</h2>
+  <input id="phone" class="input" placeholder="Enter Phone Number" />
+  <button class="btn" onclick="sendOTP()">Send OTP</button>
+  <div id="otp-box" style="display:none;">
+    <input id="otp" class="input" placeholder="Enter OTP" />
+    <button class="btn" onclick="verifyOTP()">Verify OTP</button>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app" style="display:none;">
+  <header>
+    <h1>The Virtual Plate</h1>
+    <p>Your Cloud Kitchen | Est. 2025</p>
+  </header>
+
+  <div>
+    <button class="btn" onclick="showMenu()">Menu</button>
+    <button class="btn" onclick="viewCart()">Cart</button>
+    <button class="btn" onclick="showOrders()">My Orders</button>
+    <button class="btn" onclick="showReviews()">Reviews</button>
+  </div>
+
+  <div id="content"></div>
+</div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyCZZXqnP6k0vVDPxLhJyQ3dSUt05L8_vm4",
+    authDomain: "the-virtual-plate-2b993.firebaseapp.com",
+    projectId: "the-virtual-plate-2b993",
+    storageBucket: "the-virtual-plate-2b993.firebasestorage.app",
+    messagingSenderId: "382116681439",
+    appId: "1:382116681439:web:6030e330fb88fbc9887b6a",
+    measurementId: "G-B28SCX2W80"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+
+  let cart = [];
+  let currentUser = null;
+
+  function sendOTP() {
+    const phoneNumber = "+91" + document.getElementById('phone').value;
+    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('send-otp', { size: 'invisible' });
+    auth.signInWithPhoneNumber(phoneNumber, window.recaptchaVerifier)
+      .then((confirmation) => {
+        window.confirmationResult = confirmation;
+        alert('OTP Sent');
+        document.getElementById('otp-box').style.display = 'block';
+      })
+      .catch(e => alert(e.message));
+  }
+
+  function verifyOTP() {
+    const code = document.getElementById('otp').value;
+    window.confirmationResult.confirm(code).then((result) => {
+      currentUser = result.user;
+      document.getElementById('login').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      showMenu();
+    }).catch(e => alert(e.message));
+  }
+
+  function showMenu() {
+    db.collection('menu').get().then(snapshot => {
+      let html = '<h2>Menu</h2>';
+      snapshot.forEach(doc => {
+        const item = doc.data();
+        html += `
+          <div class="menu-item">
+            <strong>${item.name}</strong> - ₹${item.price}
+            <button class="btn" onclick="addToCart('${doc.id}', '${item.name}', ${item.price})">Add to Cart</button>
+          </div>`;
+      });
+      document.getElementById('content').innerHTML = html;
+    });
+  }
+
+  function addToCart(id, name, price) {
+    cart.push({ id, name, price });
+    alert(`${name} added to cart`);
+  }
+
+  function viewCart() {
+    if (cart.length === 0) {
+      alert('Cart is empty');
+      return;
+    }
+    let html = '<h2>Your Cart</h2>';
+    let total = 0;
+    cart.forEach(item => {
+      html += `<div class="cart-item">${item.name} - ₹${item.price}</div>`;
+      total += item.price;
+    });
+    html += `<h3>Total: ₹${total}</h3>`;
+    html += `
+      <button class="btn" onclick="checkout(${total})">Checkout (UPI/COD)</button>`;
+    document.getElementById('content').innerHTML = html;
+  }
+
+  function checkout(total) {
+    const method = confirm("Click OK for UPI, Cancel for COD");
+    const order = {
+      user: currentUser.phoneNumber,
+      cart,
+      total,
+      status: 'Placed',
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    db.collection('orders').add(order);
+    if (method) {
+      const link = `upi://pay?pa=sumon.2458@waicici&pn=The Virtual Plate&am=${total}&cu=INR`;
+      window.location.href = link;
+    } else {
+      alert('Order placed with COD');
+    }
+    cart = [];
+    showMenu();
+  }
+
+  function showOrders() {
+    db.collection('orders').where('user', '==', currentUser.phoneNumber).get().then(snapshot => {
+      let html = '<h2>Your Orders</h2>';
+      snapshot.forEach(doc => {
+        const order = doc.data();
+        html += `<div class="cart-item">
+          Order ID: ${doc.id}<br/>
+          Total: ₹${order.total}<br/>
+          Status: ${order.status}<br/>
+          <button class="btn" onclick="addReview('${doc.id}')">Add Review</button>
+        </div>`;
+      });
+      document.getElementById('content').innerHTML = html;
+    });
+  }
+
+  function addReview(orderId) {
+    const rating = prompt("Rate (1-5):");
+    const comment = prompt("Write Review:");
+    db.collection('reviews').add({
+      user: currentUser.phoneNumber,
+      orderId,
+      rating,
+      comment,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    }).then(() => {
+      alert('Review submitted');
+    });
+  }
+
+  function showReviews() {
+    db.collection('reviews').get().then(snapshot => {
+      let html = '<h2>Reviews</h2>';
+      snapshot.forEach(doc => {
+        const review = doc.data();
+        html += `<div class="review-item">
+          ⭐ ${review.rating}<br/>
+          ${review.comment}<br/>
+          From: ${review.user}
+        </div>`;
+      });
+      document.getElementById('content').innerHTML = html;
+    });
+  }
+</script>
+
+<footer>
+  The Virtual Plate &copy; 2025 | All rights reserved<br/>
+  16/2H, Dover Terrace, Kolkata-700019
+</footer>
+
+</body>
+</html>
