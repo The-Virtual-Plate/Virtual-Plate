@@ -56,6 +56,7 @@
   <h2>Login / Register</h2>
   <input id="phone" class="input" placeholder="Enter Phone Number" />
   <button class="btn" onclick="sendOTP()">Send OTP</button>
+  <div id="recaptcha-container"></div> <!-- reCAPTCHA Container (Must) -->
   <div id="otp-box" style="display:none;">
     <input id="otp" class="input" placeholder="Enter OTP" />
     <button class="btn" onclick="verifyOTP()">Verify OTP</button>
@@ -88,7 +89,7 @@
     apiKey: "AIzaSyCZZXqnP6k0vVDPxLhJyQ3dSUt05L8_vm4",
     authDomain: "the-virtual-plate-2b993.firebaseapp.com",
     projectId: "the-virtual-plate-2b993",
-    storageBucket: "the-virtual-plate-2b993.firebasestorage.app",
+    storageBucket: "the-virtual-plate-2b993.appspot.com",
     messagingSenderId: "382116681439",
     appId: "1:382116681439:web:6030e330fb88fbc9887b6a",
     measurementId: "G-B28SCX2W80"
@@ -102,14 +103,21 @@
 
   function sendOTP() {
     const phoneNumber = "+91" + document.getElementById('phone').value;
-    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('send-otp', { size: 'invisible' });
-    auth.signInWithPhoneNumber(phoneNumber, window.recaptchaVerifier)
-      .then((confirmation) => {
-        window.confirmationResult = confirmation;
-        alert('OTP Sent');
-        document.getElementById('otp-box').style.display = 'block';
-      })
-      .catch(e => alert(e.message));
+    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+      'size': 'invisible',
+      'callback': function(response) {
+        // reCAPTCHA solved automatically
+      }
+    });
+    window.recaptchaVerifier.render().then(function(widgetId) {
+      auth.signInWithPhoneNumber(phoneNumber, window.recaptchaVerifier)
+        .then((confirmation) => {
+          window.confirmationResult = confirmation;
+          alert('OTP Sent');
+          document.getElementById('otp-box').style.display = 'block';
+        })
+        .catch(e => alert(e.message));
+    });
   }
 
   function verifyOTP() {
