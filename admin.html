@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Panel - The Virtual Plate</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #fff8f0; }
+    h1 { color: #ff6f00; }
+    .btn { padding: 10px 15px; background: #ff6f00; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 10px; }
+    .section { margin-top: 30px; padding: 15px; background: #fff; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    input, select { padding: 8px; width: 90%; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 5px; }
+  </style>
+</head>
+<body>
+
+<h1>Admin Panel - The Virtual Plate</h1>
+
+<!-- Login Section -->
+<div id="login-section">
+  <h2>Admin Login</h2>
+  <input type="text" id="phone" placeholder="Enter Admin Phone (+91...)">
+  <button class="btn" onclick="sendOTP()">Send OTP</button>
+  <div id="otp-section" style="display:none;">
+    <input type="text" id="otp" placeholder="Enter OTP">
+    <button class="btn" onclick="verifyOTP()">Verify OTP</button>
+  </div>
+</div>
+
+<!-- Admin Panel Section -->
+<div id="admin-section" style="display:none;">
+  <div class="section">
+    <h2>Menu Management</h2>
+    <input type="text" id="food-name" placeholder="Food Name">
+    <input type="number" id="food-price" placeholder="Price">
+    <button class="btn" onclick="addMenu()">Add Menu Item</button>
+    <h3>Existing Menu:</h3>
+    <ul id="menu-list"></ul>
+  </div>
+
+  <div class="section">
+    <h2>Orders</h2>
+    <ul id="orders-list"></ul>
+  </div>
+
+  <div class="section">
+    <h2>Reviews</h2>
+    <ul id="reviews-list"></ul>
+  </div>
+</div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyCZZXqnP6k0vVDPxLhJyQ3dSUt05L8_vm4",
+  authDomain: "the-virtual-plate-2b993.firebaseapp.com",
+  projectId: "the-virtual-plate-2b993",
+  storageBucket: "the-virtual-plate-2b993.firebasestorage.app",
+  messagingSenderId: "382116681439",
+  appId: "1:382116681439:web:6030e330fb88fbc9887b6a",
+  measurementId: "G-B28SCX2W80"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+let confirmationResult;
+
+function sendOTP() {
+  const phoneNumber = document.getElementById('phone').value;
+  const appVerifier = new firebase.auth.RecaptchaVerifier('sendOTP', { size: 'invisible' });
+  auth.signInWithPhoneNumber(phoneNumber, appVerifier).then((result) => {
+    confirmationResult = result;
+    alert('OTP Sent');
+    document.getElementById('otp-section').style.display = 'block';
+  }).catch(alert);
+}
+
+function verifyOTP() {
+  const otp = document.getElementById('otp').value;
+  confirmationResult.confirm(otp).then(() => {
+    const userPhone = auth.currentUser.phoneNumber;
+    if (userPhone === '+917439287414') {
+      alert('Admin Verified');
+      document.getElementById('login-section').style.display = 'none';
+      document.getElementById('admin-section').style.display = 'block';
+      loadMenu();
+      loadOrders();
+      loadReviews();
+    } else {
+      alert('Access Denied');
+    }
+  }).catch(alert);
+}
+
+function addMenu() {
+  const name = document.getElementById('food-name').value;
+  const price = Number(document.getElementById('food-price').value);
+  if (name && price) {
+    db.collection('menu').add({ name, price }).then(() => {
+      alert('Menu Item Added');
+      loadMenu();
+    });
+  } else {
+    alert('Enter valid name and price');
+  }
+}
+
+function loadMenu() {
+  const menuList = document.getElementById('menu-list');
+  menuList.innerHTML = '';
+  db.collection('menu').get().then(snapshot => {
+    snapshot.forEach(doc => {
+      const item = doc.data();
+      const li = document.createElement('li');
+      li.textContent = `${item.name} - ₹${item.price}`;
+      const delBtn = document.createElement('button');
+      delBtn.textContent = 'Delete';
+      delBtn.className = 'btn';
+      delBtn.onclick = () => {
+        db.collection('menu').doc(doc.id).delete().then(loadMenu);
+      };
+      li.appendChild(delBtn);
+      menuList.appendChild(li);
+    });
+  });
+}
+
+function loadOrders() {
+  const ordersList = document.getElementById('orders-list');
+  ordersList.innerHTML = '';
+  db.collection('orders').get().then(snapshot => {
+    snapshot.forEach(doc => {
+      const order = doc.data();
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <strong>${order.customerName || 'Customer'}</strong>: ₹${order.total} [${order.status}]
+        <select onchange="updateOrderStatus('${doc.id}', this.value)">
+          <option value="Placed" ${order.status === 'Placed' ? 'selected' : ''}>Placed</option>
+          <option value="Preparing" ${order.status === 'Preparing' ? 'selected' : ''}>Preparing</option>
+          <option value="Out for Delivery" ${order.status === 'Out for Delivery' ? 'selected' : ''}>Out for Delivery</option>
+          <option value="Delivered" ${order.status === 'Delivered' ? 'selected' : ''}>Delivered</option>
+        </select>
+      `;
+      ordersList.appendChild(li);
+    });
+  });
+}
+
+function updateOrderStatus(id, status) {
+  db.collection('orders').doc(id).update({ status }).then(() => {
+    alert('Order Status Updated');
+    loadOrders();
+  });
+}
+
+function loadReviews() {
+  const reviewsList = document.getElementById('reviews-list');
+  reviewsList.innerHTML = '';
+  db.collection('reviews').get().then(snapshot => {
+    snapshot.forEach(doc => {
+      const review = doc.data();
+      const li = document.createElement('li');
+      li.textContent = `${review.customerName || 'Customer'}: ${review.rating}⭐ - ${review.comment}`;
+      reviewsList.appendChild(li);
+    });
+  });
+}
+</script>
+
+</body>
+</html>
